@@ -54,7 +54,7 @@ YSpace 不实现 Play Integrity、硬件证明、银行安全策略或其他完�
 
 - JDK 17
 - Gradle 9.4.1
-- Android SDK 37
+- Android SDK 36（Android 16）
 - AGP 9.2.0
 
 ```bash
