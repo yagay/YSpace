@@ -18,6 +18,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.github.libxposed.api.XposedInterface;
 import io.github.libxposed.api.XposedModule;
+import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam;
+import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam;
+import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam;
 
 /**
  * Observation-only LSPosed entry.
@@ -35,12 +38,17 @@ public final class RuntimeObserverModule extends XposedModule {
     private volatile Context appContext;
 
     @Override
+    public void onModuleLoaded(ModuleLoadedParam param) {
+        processName = param.getProcessName() == null ? "" : param.getProcessName();
+    }
+
+    @Override
     public void onPackageLoaded(PackageLoadedParam param) {
         String pkg = param.getPackageName();
         if (pkg == null || pkg.isEmpty() || "com.yagay.YSpace".equals(pkg)) return;
 
         packageName = pkg;
-        processName = param.getProcessName() == null ? pkg : param.getProcessName();
+        if (processName.isEmpty()) processName = pkg;
 
         if (!attachHookInstalled.compareAndSet(false, true)) return;
 
