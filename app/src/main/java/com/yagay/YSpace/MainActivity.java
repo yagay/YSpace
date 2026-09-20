@@ -218,7 +218,7 @@ public final class MainActivity extends Activity {
             provisionProfile();
             return;
         }
-        final int userId = workUser.getIdentifier();
+        final int userId = profileUserId(workUser);
         status.setText("正在加入隔离空间：" + packageName);
         new Thread(() -> {
             RootProfileOps.Result result = RootProfileOps.clonePackage(packageName, userId);
@@ -241,7 +241,7 @@ public final class MainActivity extends Activity {
 
     private void removeFromWork(String packageName) {
         if (workUser == null) return;
-        final int userId = workUser.getIdentifier();
+        final int userId = profileUserId(workUser);
         new Thread(() -> {
             RootProfileOps.Result result = RootProfileOps.removePackage(packageName, userId);
             runOnUiThread(() -> {
@@ -347,9 +347,25 @@ public final class MainActivity extends Activity {
         if (workUser == null) {
             status.setText("未初始化隔离空间 · 首次需要 Android 系统确认一次");
         } else {
-            status.setText("隔离空间已连接 · User " + workUser.getIdentifier() +
+            status.setText("隔离空间已连接 · User " + profileUserId(workUser) +
                     " · 点击未隔离 App 可快速加入");
         }
+    }
+
+    private int profileUserId(UserHandle user) {
+        if (user == null) return -1;
+
+        // UserHandle#getIdentifier() is hidden from public SDK stubs.
+        // Its public toString() is UserHandle{<id>} on Android; hashCode is a final fallback.
+        String value = user.toString();
+        int open = value.indexOf('{');
+        int close = value.indexOf('}', open + 1);
+        if (open >= 0 && close > open + 1) {
+            try {
+                return Integer.parseInt(value.substring(open + 1, close));
+            } catch (NumberFormatException ignored) {}
+        }
+        return user.hashCode();
     }
 
     private String label(ApplicationInfo ai) {
