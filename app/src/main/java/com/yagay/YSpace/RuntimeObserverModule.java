@@ -1,6 +1,7 @@
 package com.yagay.YSpace;
 
 import android.app.Application;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
@@ -277,9 +278,14 @@ public final class RuntimeObserverModule extends XposedModule {
     private void hookNamed(Class<?> clazz, String methodName, String type,
                            ObjectExtractor extractor, boolean sensitiveResult,
                            boolean listDetails) {
-        for (Method method : clazz.getDeclaredMethods()) {
-            if (!method.getName().equals(methodName)) continue;
-            hookExact(method, type, extractor, sensitiveResult, listDetails);
+        try {
+            for (Method method : clazz.getDeclaredMethods()) {
+                if (!method.getName().equals(methodName)) continue;
+                hookExact(method, type, extractor, sensitiveResult, listDetails);
+            }
+        } catch (Throwable t) {
+            log(android.util.Log.WARN, "YSpaceObserver",
+                    "Enumerating hooks failed " + clazz.getName() + "." + methodName);
         }
     }
 
@@ -325,7 +331,8 @@ public final class RuntimeObserverModule extends XposedModule {
         if (context == null || packageName.isEmpty()) return;
         try {
             Intent event = new Intent(EventReceiver.ACTION);
-            event.setPackage("com.yagay.YSpace");
+            event.setComponent(new ComponentName(
+                    "com.yagay.YSpace", "com.yagay.YSpace.EventReceiver"));
             event.putExtra("ts", System.currentTimeMillis());
             event.putExtra("session", session);
             event.putExtra("source_package", packageName);
