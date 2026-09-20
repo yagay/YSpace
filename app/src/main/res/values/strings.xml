@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">YSpace</string>
+    <string name="module_description">Observe the real environment objects queried by selected apps without changing their results.</string>
+    <string name="device_admin_description">Creates and manages the YSpace isolated Work Profile.</string>
+</resources>
