@@ -1,0 +1,1 @@
+Validate libxposed service 101 scope sync with API 102 hooks.
