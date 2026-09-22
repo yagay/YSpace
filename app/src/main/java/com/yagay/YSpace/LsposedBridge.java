@@ -44,7 +44,7 @@ final class LsposedBridge {
                         service = incoming;
                         lastMessage = incoming.getFrameworkName() + " " +
                                 incoming.getFrameworkVersion() + " · API " +
-                                incoming.getApiVersion();
+                                incoming.getAPIVersion();
                     }
                 } catch (Throwable t) {
                     service = incoming;
@@ -123,25 +123,60 @@ final class LsposedBridge {
         }
 
         ArrayList<String> add = new ArrayList<>(requested);
-        try {
-            s.requestScope(add, new XposedService.OnScopeEventListener() {
-                @Override
-                public void onScopeRequestApproved(List<String> approved) {
-                    lastMessage = "LSPosed 已批准 " + approved.size() + " 个作用域";
-                    notifyChanged();
-                    callback.onDone(true, lastMessage, approved);
-                }
+        java.util.concurrent.atomic.AtomicInteger remaining =
+                new java.util.concurrent.atomic.AtomicInteger(add.size());
+        List<String> approved = java.util.Collections.synchronizedList(new ArrayList<>());
+        List<String> failed = java.util.Collections.synchronizedList(new ArrayList<>());
 
-                @Override
-                public void onScopeRequestFailed(String message) {
-                    lastMessage = "LSPosed 作用域请求失败：" + message;
+        for (String pkg : add) {
+            try {
+                s.requestScope(pkg, new XposedService.OnScopeEventListener() {
+                    private void finish(String error) {
+                        if (error != null && !error.isBlank()) failed.add(error);
+                        if (remaining.decrementAndGet() == 0) {
+                            boolean ok = failed.isEmpty();
+                            String message = ok
+                                    ? "LSPosed 已同步 " + approved.size() + " 个推荐应用"
+                                    : "LSPosed 已同步 " + approved.size() + " 个，失败 " + failed.size() + " 个";
+                            lastMessage = message;
+                            notifyChanged();
+                            callback.onDone(ok, message, new ArrayList<>(approved));
+                        }
+                    }
+
+                    @Override
+                    public void onScopeRequestApproved(String packageName) {
+                        approved.add(packageName);
+                        finish(null);
+                    }
+
+                    @Override
+                    public void onScopeRequestDenied(String packageName) {
+                        finish(packageName + "：用户拒绝");
+                    }
+
+                    @Override
+                    public void onScopeRequestTimeout(String packageName) {
+                        finish(packageName + "：授权超时");
+                    }
+
+                    @Override
+                    public void onScopeRequestFailed(String packageName, String message) {
+                        finish(packageName + "：" + message);
+                    }
+                });
+            } catch (Throwable t) {
+                failed.add(pkg + "：" + t.getClass().getSimpleName());
+                if (remaining.decrementAndGet() == 0) {
+                    boolean ok = failed.isEmpty();
+                    String message = ok
+                            ? "LSPosed 已同步 " + approved.size() + " 个推荐应用"
+                            : "LSPosed 已同步 " + approved.size() + " 个，失败 " + failed.size() + " 个";
+                    lastMessage = message;
                     notifyChanged();
-                    callback.onDone(false, lastMessage, Collections.emptyList());
+                    callback.onDone(ok, message, new ArrayList<>(approved));
                 }
-            });
-        } catch (Throwable t) {
-            lastMessage = "请求 LSPosed 作用域失败：" + t.getClass().getSimpleName();
-            callback.onDone(false, lastMessage, Collections.emptyList());
+            }
         }
     }
 
