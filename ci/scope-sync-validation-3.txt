@@ -1,0 +1,1 @@
+Validate released libxposed service 101 scope API.
