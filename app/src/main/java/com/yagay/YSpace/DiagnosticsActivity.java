@@ -50,6 +50,13 @@ public final class DiagnosticsActivity extends Activity {
         note.setPadding(0, dp(8), 0, dp(10));
         root.addView(note);
 
+        Button scope = new Button(this);
+        scope.setText("LSPosed 诊断设置");
+        scope.setAllCaps(false);
+        scope.setOnClickListener(v -> ObserverSetup.showGuide(this, selectedPackage));
+        root.addView(scope, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(48)));
+
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
 
@@ -97,8 +104,10 @@ public final class DiagnosticsActivity extends Activity {
         List<DiagnosticsDb.PackageRow> rows = db.packages();
         if (rows.isEmpty()) {
             content.addView(text(
-                    "还没有记录。\n\n在 LSPosed 中启用 YSpace，并把需要观察的工作资料 App 加入模块作用域；" +
-                    "重新启动目标 App 后，只有它真实访问过的对象才会出现在这里。",
+                    "还没有任何 Observer 注入记录。\n\n" +
+                    "这不代表目标 App 没有检测环境，而是 YSpace 还没有收到目标进程的 Hook 心跳。\n\n" +
+                    "请确认：LSPosed → YSpace → Work Profile / 工作资料 → 勾选目标 App，" +
+                    "然后强制停止并重新打开目标 App。",
                     15, false));
             return;
         }
@@ -106,9 +115,11 @@ public final class DiagnosticsActivity extends Activity {
         for (DiagnosticsDb.PackageRow row : rows) {
             Button b = new Button(this);
             String when = DateFormat.format("MM-dd HH:mm", new Date(row.lastTime)).toString();
+            String observer = row.observerInjected() ? "Observer 已注入 ✓" : "Observer 状态异常";
             b.setAllCaps(false);
             b.setGravity(android.view.Gravity.START | android.view.Gravity.CENTER_VERTICAL);
-            b.setText(row.packageName + "\n" + row.count + " 条真实访问 · " + when);
+            b.setText(row.packageName + "\n" + observer + " · " +
+                    row.realCount + " 条真实检测 · " + when);
             b.setOnClickListener(v -> {
                 selectedPackage = row.packageName;
                 render();
@@ -123,10 +134,38 @@ public final class DiagnosticsActivity extends Activity {
         p.setPadding(0, dp(8), 0, dp(8));
         content.addView(p);
 
-        List<DiagnosticsDb.EventRow> rows = db.events(packageName, 1000);
-        if (rows.isEmpty()) {
-            content.addView(text("没有记录。", 15, false));
+        DiagnosticsDb.PackageStatus status = db.status(packageName);
+        if (!status.observerInjected()) {
+            TextView warning = text(
+                    "Observer 未注入 ✕\n\n" +
+                    "当前没有收到这个 App 的 YSpace Hook 心跳。最常见原因：\n" +
+                    "• YSpace 模块未在 LSPosed 启用\n" +
+                    "• 勾选的是主空间 App，不是 Work Profile 版本\n" +
+                    "• 勾选后没有强制停止并重新启动目标 App\n\n" +
+                    "点击上方“LSPosed 诊断设置”查看具体设置。",
+                    15, true);
+            warning.setPadding(dp(10), dp(12), dp(10), dp(12));
+            content.addView(warning);
             return;
+        }
+
+        String injectedAt = DateFormat.format(
+                "MM-dd HH:mm:ss", new Date(status.lastObserverTime)).toString();
+        TextView health = text(
+                "Observer 已注入 ✓\n" +
+                "最近 Hook：" + injectedAt + "\n" +
+                "Session：" + status.sessionCount + "\n" +
+                "真实检测调用：" + status.realCount,
+                14, true);
+        health.setPadding(dp(10), dp(8), dp(10), dp(12));
+        content.addView(health);
+
+        List<DiagnosticsDb.EventRow> rows = db.events(packageName, 1000);
+        if (status.realCount == 0) {
+            content.addView(text(
+                    "Hook 已经正常工作，但当前 Session 还没有捕获到目标 App 的 Java / Android Framework 环境检测调用。\n\n" +
+                    "可以继续操作登录、支付、转账等页面后再回来查看。Native 直接 syscall 目前仍不在这一层记录范围内。",
+                    15, false));
         }
 
         String lastSession = null;
