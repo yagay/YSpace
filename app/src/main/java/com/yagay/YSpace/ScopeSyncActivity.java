@@ -65,7 +65,7 @@ public final class ScopeSyncActivity extends Activity {
         root.addView(title);
 
         TextView note = text(
-                "这里运行在工作资料中。YSpace 通过 libxposed 官方 requestScope() 请求把推荐应用加入当前工作资料的 LSPosed 作用域；LSPosed 会显示授权确认。",
+                "这里运行在工作资料中。默认只推荐 Hook 你要诊断的目标 App；不默认 Hook system、SystemUI 或 Google Play Services。YSpace 通过 libxposed 官方 requestScope() 请求加入当前工作资料的 LSPosed 作用域，LSPosed 会显示授权确认。",
                 14, false);
         note.setPadding(0, dp(8), 0, dp(10));
         root.addView(note);
@@ -110,7 +110,8 @@ public final class ScopeSyncActivity extends Activity {
             content.addView(text("推荐应用", 17, true));
             for (String pkg : recommended) {
                 TextView row = text(
-                        pkg + "\n" + (inScope.contains(pkg)
+                        appLabel(pkg) + "\n" + pkg + "\n目标 App · 推荐 Hook：记录它实际查询的环境对象\n" +
+                                (inScope.contains(pkg)
                                 ? "✓ 已在工作资料 LSPosed 作用域"
                                 : "○ 推荐加入作用域"),
                         14, false);
@@ -155,6 +156,17 @@ public final class ScopeSyncActivity extends Activity {
                     status.setText(message);
                     render();
                 }));
+    }
+
+    private String appLabel(String packageName) {
+        try {
+            android.content.pm.ApplicationInfo info =
+                    getPackageManager().getApplicationInfo(packageName, 0);
+            CharSequence label = getPackageManager().getApplicationLabel(info);
+            return label == null ? packageName : label.toString();
+        } catch (Throwable ignored) {
+            return packageName;
+        }
     }
 
     private TextView text(String value, int sp, boolean bold) {
