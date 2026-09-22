@@ -38,6 +38,7 @@ public final class MainActivity extends Activity {
     private LauncherApps launcherApps;
     private CrossProfileApps crossProfileApps;
     private UserHandle workUser;
+    private Button scopeSyncButton;
     private final ArrayList<ApplicationInfo> apps = new ArrayList<>();
 
     @Override
@@ -64,6 +65,7 @@ public final class MainActivity extends Activity {
         super.onResume();
         if (list != null) {
             workUser = findWorkUser();
+            seedExistingRecommendations();
             updateStatus();
             render();
         }
@@ -178,8 +180,11 @@ public final class MainActivity extends Activity {
 
         TextView text = new TextView(this);
         boolean inside = isInWorkProfile(ai.packageName);
+        boolean recommended = RecommendedStore.contains(this, ai.packageName);
         text.setText(label + (inside ? "   ✓" : "") + "\n" + ai.packageName +
-                "\n" + (inside ? "已隔离 · 点击启动" : "点击加入隔离"));
+                "\n" + (inside
+                ? "已隔离 · 点击启动" + (recommended ? " · 推荐 Hook" : "")
+                : "点击加入隔离"));
         text.setTextSize(14);
         text.setPadding(dp(10), 0, dp(4), 0);
         row.addView(text, new LinearLayout.LayoutParams(0,
@@ -256,8 +261,10 @@ public final class MainActivity extends Activity {
         new Thread(() -> {
             RootProfileOps.Result result = RootProfileOps.removePackage(packageName, userId);
             runOnUiThread(() -> {
+                if (result.ok) RecommendedStore.remove(this, packageName);
                 Toast.makeText(this, result.ok ? "已从隔离空间移除" : result.output,
                         Toast.LENGTH_LONG).show();
+                updateStatus();
                 render();
             });
         }, "YSpace-remove").start();
@@ -314,6 +321,71 @@ public final class MainActivity extends Activity {
         Toast.makeText(this, "无法打开工作资料中的诊断器", Toast.LENGTH_LONG).show();
     }
 
+    private void openScopeSync(List<String> packages, boolean autoSync) {
+        if (workUser == null) {
+            Toast.makeText(this, "请先初始化隔离空间", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        ArrayList<String> filtered = new ArrayList<>();
+        if (packages != null) {
+            for (String pkg : packages) {
+                if (pkg != null && isInWorkProfile(pkg) && !pkg.equals(getPackageName())) {
+                    filtered.add(pkg);
+                }
+            }
+        }
+        if (filtered.isEmpty()) {
+            Toast.makeText(this, "没有可同步的工作资料推荐应用", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        Intent intent = new Intent(this, ScopeSyncActivity.class)
+                .setComponent(new ComponentName(this, ScopeSyncActivity.class))
+                .putStringArrayListExtra(ScopeSyncActivity.EXTRA_PACKAGES, filtered)
+                .putExtra(ScopeSyncActivity.EXTRA_AUTO_SYNC, autoSync);
+
+        if (Build.VERSION.SDK_INT >= 30 && crossProfileApps != null) {
+            try {
+                if (crossProfileApps.canInteractAcrossProfiles()) {
+                    crossProfileApps.startActivity(intent, workUser, this);
+                    return;
+                }
+                if (crossProfileApps.canRequestInteractAcrossProfiles()) {
+                    startActivity(crossProfileApps.createRequestInteractAcrossProfilesIntent());
+                    Toast.makeText(this,
+                            "先允许 YSpace 跨资料连接；授权后再点一次“推荐 Hook / 同步 LSPosed”。",
+                            Toast.LENGTH_LONG).show();
+                    return;
+                }
+            } catch (Throwable t) {
+                Toast.makeText(this, "打开工作资料同步页失败：" + t.getMessage(),
+                        Toast.LENGTH_LONG).show();
+                return;
+            }
+        }
+
+        Toast.makeText(this,
+                "系统未允许跨资料启动。请先在系统设置中允许 YSpace 的跨资料连接。",
+                Toast.LENGTH_LONG).show();
+    }
+
+    private List<String> recommendedWorkPackages() {
+        ArrayList<String> out = new ArrayList<>();
+        for (String pkg : RecommendedStore.list(this)) {
+            if (isInWorkProfile(pkg)) out.add(pkg);
+        }
+        return out;
+    }
+
+    private void seedExistingRecommendations() {
+        if (workUser == null || apps.isEmpty()) return;
+        for (ApplicationInfo ai : apps) {
+            if (ai.packageName.equals("com.google.android.gms")) continue;
+            if (isInWorkProfile(ai.packageName)) RecommendedStore.add(this, ai.packageName);
+        }
+    }
+
     private boolean isInWorkProfile(String packageName) {
         if (workUser == null || launcherApps == null) return false;
         try { return !launcherApps.getActivityList(packageName, workUser).isEmpty(); }
@@ -357,9 +429,14 @@ public final class MainActivity extends Activity {
         if (status == null) return;
         if (workUser == null) {
             status.setText("未初始化隔离空间 · 首次需要 Android 系统确认一次");
+            if (scopeSyncButton != null) scopeSyncButton.setText("推荐 Hook / 同步 LSPosed");
         } else {
+            int recommended = recommendedWorkPackages().size();
             status.setText("隔离空间已连接 · User " + profileUserId(workUser) +
-                    " · 点击未隔离 App 可快速加入");
+                    " · 推荐 Hook " + recommended + " 个");
+            if (scopeSyncButton != null) {
+                scopeSyncButton.setText("推荐 Hook / 同步 LSPosed (" + recommended + ")");
+            }
         }
     }
 
