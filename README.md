@@ -15,6 +15,8 @@ YSpace 是一个面向 Android 16+ 的轻量应用隔离与运行时环境观察
 - 观察模块只调用原始方法并记录结果，不修改参数、返回值、异常或完整性 verdict。
 - 每次目标进程启动建立独立 Session。
 - 诊断页只显示实际发生过的访问；没有访问过的项目不会显示“未检测”。
+- 诊断状态明确区分“Observer 未注入”和“Observer 已注入但尚无真实检测调用”。
+- 主界面和 App 长按菜单提供 LSPosed 诊断设置入口。
 
 ## 当前可观察对象
 
@@ -42,9 +44,11 @@ YSpace 不实现 Play Integrity、硬件证明、银行安全策略或其他完�
 1. 安装 YSpace。
 2. 打开后点“初始化隔离”，完成 Android 系统的一次 Managed Profile 确认。
 3. 回到 YSpace，点击应用即可加入隔离；再次点击已隔离应用直接启动。
-4. 若要记录真实检测对象，在 LSPosed 中启用 YSpace，并把需要观察的**工作资料版本**目标 App 加入作用域。
-5. 强制停止并重新打开目标 App。
-6. 在 YSpace 点“真实检测记录”查看按 App、Session 和时间排序的真实访问。
+4. 若要记录真实检测对象，点击 YSpace 的“LSPosed 诊断设置”。
+5. 在 LSPosed 中启用 YSpace，切换到 **Work Profile / 工作资料用户**，只把需要观察的工作资料版本目标 App 加入作用域。
+6. 不需要勾 Android、SystemUI、Launcher、YSpace 或 Google Play 服务；只有目标 App 使用独立安全组件 APK 时，才把那个独立包额外加入作用域。
+7. 强制停止并重新打开目标 App。
+8. 在 YSpace 点“真实检测记录”。如果显示“Observer 已注入”，说明 Hook 链已工作；如果显示“Observer 未注入”，应先修正 LSPosed 作用域，而不是把空白结果理解成“目标 App 没有检测”。
 
 当前一键加入后端使用 Root，因此非常适合 KernelSU / Magisk 设备。后续可以增加 Connected Apps/Freighter 风格的非 Root APK 传输后端，而不改变主界面。
 
