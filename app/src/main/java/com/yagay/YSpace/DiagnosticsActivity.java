@@ -21,6 +21,11 @@ public final class DiagnosticsActivity extends Activity {
     private DiagnosticsDb db;
     private String selectedPackage;
 
+    private final LsposedBridge.Listener lsposedListener = () ->
+            runOnUiThread(() -> {
+                if (content != null) render();
+            });
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -30,9 +35,21 @@ public final class DiagnosticsActivity extends Activity {
     }
 
     @Override
+    protected void onStart() {
+        super.onStart();
+        LsposedBridge.addListener(lsposedListener);
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
         if (content != null) render();
+    }
+
+    @Override
+    protected void onStop() {
+        LsposedBridge.removeListener(lsposedListener);
+        super.onStop();
     }
 
     private void build() {
