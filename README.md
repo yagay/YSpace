@@ -18,6 +18,29 @@ YSpace 是一个面向 Android 16+ 的轻量应用隔离与运行时环境观察
 - 诊断状态明确区分“Observer 未注入”和“Observer 已注入但尚无真实检测调用”。
 - 主界面和 App 长按菜单提供 LSPosed 诊断设置入口。
 
+## LSPosed 推荐 Hook 与同步
+
+YSpace 0.2.0 增加了推荐作用域管理：
+
+- 新加入工作资料的目标 App 会自动标记为“推荐 Hook”。
+- 已存在于工作资料的普通目标 App也会补入推荐列表。
+- Google Play Services 不会默认推荐，避免产生大量无关日志；需要研究 GMS 自身行为时再单独选择。
+- 主界面“推荐 Hook / 同步 LSPosed”会打开工作资料中的同步页。
+- 同步页通过 libxposed service 的官方 `requestScope()` 请求把推荐包加入**当前工作资料用户**的 LSPosed 作用域。
+- LSPosed 会显示授权确认；YSpace 不直接修改 LSPosed 数据库。
+- 只需在 LSPosed 中手动启用 YSpace 模块一次，后续目标 App 作用域可由 YSpace 发起同步请求。
+
+推荐规则：
+
+```text
+目标 App（工作资料版本）          推荐 Hook
+Google Play Services             默认不 Hook
+system / SystemUI                默认不 Hook
+YSpace 自身                       不 Hook
+```
+
+真实检测记录页现在会显示 LSPosed 服务连接状态、工作资料当前作用域以及目标 App 是否在作用域。只要目标 App 被成功注入，进程启动本身至少会产生 `session` / `observer` 记录；如果完全为空，会明确提示是作用域/注入/日志链故障，而不是误判为“目标 App 没有检测”。
+
 ## 当前可观察对象
 
 - PackageManager：具体包名查询、应用枚举、Intent 解析。
