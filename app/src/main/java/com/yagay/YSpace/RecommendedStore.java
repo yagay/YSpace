@@ -25,8 +25,7 @@ final class RecommendedStore {
 
     static void add(Context context, String packageName) {
         if (packageName == null || packageName.isBlank() ||
-                packageName.equals(context.getPackageName()) ||
-                packageName.equals("com.google.android.gms")) return;
+                packageName.equals(context.getPackageName())) return;
         Set<String> next = new HashSet<>(prefs(context).getStringSet(KEY, Collections.emptySet()));
         next.add(packageName);
         prefs(context).edit().putStringSet(KEY, next).apply();
