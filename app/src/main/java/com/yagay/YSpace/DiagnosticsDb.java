@@ -13,12 +13,45 @@ import java.util.List;
 final class DiagnosticsDb extends SQLiteOpenHelper {
     static final class PackageRow {
         final String packageName;
-        final int count;
+        final int totalCount;
+        final int realCount;
         final long lastTime;
-        PackageRow(String packageName, int count, long lastTime) {
+        final long lastObserverTime;
+
+        PackageRow(String packageName, int totalCount, int realCount,
+                   long lastTime, long lastObserverTime) {
             this.packageName = packageName;
-            this.count = count;
+            this.totalCount = totalCount;
+            this.realCount = realCount;
             this.lastTime = lastTime;
+            this.lastObserverTime = lastObserverTime;
+        }
+
+        boolean observerInjected() {
+            return lastObserverTime > 0;
+        }
+    }
+
+    static final class PackageStatus {
+        final String packageName;
+        final int totalCount;
+        final int realCount;
+        final int sessionCount;
+        final long lastTime;
+        final long lastObserverTime;
+
+        PackageStatus(String packageName, int totalCount, int realCount,
+                      int sessionCount, long lastTime, long lastObserverTime) {
+            this.packageName = packageName;
+            this.totalCount = totalCount;
+            this.realCount = realCount;
+            this.sessionCount = sessionCount;
+            this.lastTime = lastTime;
+            this.lastObserverTime = lastObserverTime;
+        }
+
+        boolean observerInjected() {
+            return lastObserverTime > 0;
         }
     }
 
@@ -97,11 +130,46 @@ final class DiagnosticsDb extends SQLiteOpenHelper {
     List<PackageRow> packages() {
         ArrayList<PackageRow> rows = new ArrayList<>();
         try (Cursor c = getReadableDatabase().rawQuery(
-                "SELECT source_package, COUNT(*), MAX(ts) FROM events GROUP BY source_package ORDER BY MAX(ts) DESC",
+                "SELECT source_package, COUNT(*), " +
+                "SUM(CASE WHEN type NOT IN ('session','observer') THEN 1 ELSE 0 END), " +
+                "MAX(ts), " +
+                "MAX(CASE WHEN type='observer' THEN ts ELSE 0 END) " +
+                "FROM events GROUP BY source_package ORDER BY MAX(ts) DESC",
                 null)) {
-            while (c.moveToNext()) rows.add(new PackageRow(c.getString(0), c.getInt(1), c.getLong(2)));
+            while (c.moveToNext()) {
+                rows.add(new PackageRow(
+                        c.getString(0), c.getInt(1), c.getInt(2),
+                        c.getLong(3), c.getLong(4)));
+            }
         }
         return rows;
+    }
+
+    PackageStatus status(String packageName) {
+        if (packageName == null || packageName.isEmpty()) {
+            return new PackageStatus("", 0, 0, 0, 0, 0);
+        }
+
+        try (Cursor c = getReadableDatabase().rawQuery(
+                "SELECT COUNT(*), " +
+                "SUM(CASE WHEN type NOT IN ('session','observer') THEN 1 ELSE 0 END), " +
+                "COUNT(DISTINCT CASE WHEN type='session' THEN session END), " +
+                "MAX(ts), " +
+                "MAX(CASE WHEN type='observer' THEN ts ELSE 0 END) " +
+                "FROM events WHERE source_package=?",
+                new String[]{packageName})) {
+            if (c.moveToFirst()) {
+                return new PackageStatus(
+                        packageName,
+                        c.getInt(0),
+                        c.isNull(1) ? 0 : c.getInt(1),
+                        c.isNull(2) ? 0 : c.getInt(2),
+                        c.isNull(3) ? 0 : c.getLong(3),
+                        c.isNull(4) ? 0 : c.getLong(4));
+            }
+        }
+
+        return new PackageStatus(packageName, 0, 0, 0, 0, 0);
     }
 
     List<EventRow> events(String packageName, int limit) {
