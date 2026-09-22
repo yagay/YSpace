@@ -100,6 +100,13 @@ public final class MainActivity extends Activity {
 
         root.addView(tools);
 
+        Button observerSetup = new Button(this);
+        observerSetup.setText("LSPosed 诊断设置");
+        observerSetup.setAllCaps(false);
+        observerSetup.setOnClickListener(v -> ObserverSetup.showGuide(this, null));
+        root.addView(observerSetup, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(48)));
+
         search = new EditText(this);
         search.setHint("搜索应用或包名");
         search.setSingleLine(true);
@@ -200,6 +207,7 @@ public final class MainActivity extends Activity {
         boolean inside = isInWorkProfile(packageName);
         ArrayList<String> items = new ArrayList<>();
         if (inside) items.add("启动隔离版本");
+        if (inside) items.add("LSPosed 诊断设置");
         items.add("查看真实检测记录");
         if (inside) items.add("从隔离空间移除");
 
@@ -208,6 +216,7 @@ public final class MainActivity extends Activity {
                 .setItems(items.toArray(new String[0]), (d, which) -> {
                     String action = items.get(which);
                     if (action.startsWith("启动")) launchInWork(packageName);
+                    else if (action.startsWith("LSPosed")) ObserverSetup.showGuide(this, packageName);
                     else if (action.startsWith("查看")) openDiagnostics(packageName);
                     else if (action.startsWith("从隔离")) removeFromWork(packageName);
                 }).show();
@@ -224,7 +233,9 @@ public final class MainActivity extends Activity {
             RootProfileOps.Result result = RootProfileOps.clonePackage(packageName, userId);
             runOnUiThread(() -> {
                 if (result.ok) {
-                    Toast.makeText(this, "已加入隔离空间", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this,
+                            "已加入隔离空间。需要真实检测记录时，请把工作资料版本加入 YSpace 的 LSPosed 作用域。",
+                            Toast.LENGTH_LONG).show();
                     render();
                 } else {
                     new AlertDialog.Builder(this)
