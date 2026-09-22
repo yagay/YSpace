@@ -1,0 +1,1 @@
+CI validation for YSpace 0.2.0 LSPosed observer status UI.
