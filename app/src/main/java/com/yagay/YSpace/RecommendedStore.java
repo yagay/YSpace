@@ -37,6 +37,10 @@ final class RecommendedStore {
         prefs(context).edit().putStringSet(KEY, next).apply();
     }
 
+    static void clear(Context context) {
+        prefs(context).edit().remove(KEY).apply();
+    }
+
     static List<String> list(Context context) {
         ArrayList<String> out = new ArrayList<>(
                 prefs(context).getStringSet(KEY, Collections.emptySet()));
