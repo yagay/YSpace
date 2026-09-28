@@ -27,6 +27,7 @@ import android.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 
@@ -39,6 +40,7 @@ public final class MainActivity extends Activity {
     private CrossProfileApps crossProfileApps;
     private UserHandle workUser;
     private Button scopeSyncButton;
+    private Button resetButton;
     private final ArrayList<ApplicationInfo> apps = new ArrayList<>();
 
     @Override
@@ -107,6 +109,20 @@ public final class MainActivity extends Activity {
         observerSetup.setAllCaps(false);
         observerSetup.setOnClickListener(v -> ObserverSetup.showGuide(this, null));
         root.addView(observerSetup, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(48)));
+
+        scopeSyncButton = new Button(this);
+        scopeSyncButton.setText("推荐 Hook / 同步 LSPosed");
+        scopeSyncButton.setAllCaps(false);
+        scopeSyncButton.setOnClickListener(v -> openScopeSync(recommendedWorkPackages(), true));
+        root.addView(scopeSyncButton, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(48)));
+
+        resetButton = new Button(this);
+        resetButton.setText("一键重置空间");
+        resetButton.setAllCaps(false);
+        resetButton.setOnClickListener(v -> confirmResetSpace());
+        root.addView(resetButton, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(48)));
 
         search = new EditText(this);
@@ -212,6 +228,7 @@ public final class MainActivity extends Activity {
         boolean inside = isInWorkProfile(packageName);
         ArrayList<String> items = new ArrayList<>();
         if (inside) items.add("启动隔离版本");
+        if (inside) items.add("同步到 LSPosed");
         if (inside) items.add("LSPosed 诊断设置");
         items.add("查看真实检测记录");
         if (inside) items.add("从隔离空间移除");
@@ -221,7 +238,10 @@ public final class MainActivity extends Activity {
                 .setItems(items.toArray(new String[0]), (d, which) -> {
                     String action = items.get(which);
                     if (action.startsWith("启动")) launchInWork(packageName);
-                    else if (action.startsWith("LSPosed")) ObserverSetup.showGuide(this, packageName);
+                    else if (action.startsWith("同步")) {
+                        RecommendedStore.add(this, packageName);
+                        openScopeSync(java.util.Collections.singletonList(packageName), true);
+                    } else if (action.startsWith("LSPosed")) ObserverSetup.showGuide(this, packageName);
                     else if (action.startsWith("查看")) openDiagnostics(packageName);
                     else if (action.startsWith("从隔离")) removeFromWork(packageName);
                 }).show();
@@ -238,9 +258,15 @@ public final class MainActivity extends Activity {
             RootProfileOps.Result result = RootProfileOps.clonePackage(packageName, userId);
             runOnUiThread(() -> {
                 if (result.ok) {
+                    if (!packageName.equals("com.google.android.gms")) {
+                        RecommendedStore.add(this, packageName);
+                    }
                     Toast.makeText(this,
-                            "已加入隔离空间。需要真实检测记录时，请把工作资料版本加入 YSpace 的 LSPosed 作用域。",
+                            packageName.equals("com.google.android.gms")
+                                    ? "已加入隔离空间；Google Play Services 不默认推荐 Hook"
+                                    : "已加入隔离空间，并加入推荐 Hook 列表",
                             Toast.LENGTH_LONG).show();
+                    updateStatus();
                     render();
                 } else {
                     new AlertDialog.Builder(this)
@@ -250,7 +276,6 @@ public final class MainActivity extends Activity {
                                     "\n\n这不会修改目标 App；非 Root 的 Connected Apps 安装通道会作为后续兼容后端。")
                             .setPositiveButton("确定", null).show();
                 }
-                updateStatus();
             });
         }, "YSpace-clone").start();
     }
@@ -309,7 +334,6 @@ public final class MainActivity extends Activity {
             } catch (Throwable ignored) {}
         }
 
-        // No cross-profile consent: open YSpace's launcher entry in the profile.
         try {
             List<LauncherActivityInfo> infos = launcherApps.getActivityList(getPackageName(), workUser);
             if (!infos.isEmpty()) {
@@ -354,7 +378,7 @@ public final class MainActivity extends Activity {
                 if (crossProfileApps.canRequestInteractAcrossProfiles()) {
                     startActivity(crossProfileApps.createRequestInteractAcrossProfilesIntent());
                     Toast.makeText(this,
-                            "先允许 YSpace 跨资料连接；授权后再点一次“推荐 Hook / 同步 LSPosed”。",
+                            "先允许 YSpace 跨资料连接；授权后再点一次同步。",
                             Toast.LENGTH_LONG).show();
                     return;
                 }
@@ -368,6 +392,72 @@ public final class MainActivity extends Activity {
         Toast.makeText(this,
                 "系统未允许跨资料启动。请先在系统设置中允许 YSpace 的跨资料连接。",
                 Toast.LENGTH_LONG).show();
+    }
+
+    private void confirmResetSpace() {
+        if (workUser == null) {
+            Toast.makeText(this, "隔离空间尚未初始化", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        ArrayList<String> targets = workspaceResetPackages();
+        new AlertDialog.Builder(this)
+                .setTitle("一键重置空间")
+                .setMessage("将把 YSpace 管理的工作空间恢复到初始状态：\n\n" +
+                        "• 移除 " + targets.size() + " 个隔离 App 及其工作资料应用数据\n" +
+                        "• 清空真实检测记录\n" +
+                        "• 清空推荐 Hook 和 YSpace 的 LSPosed 作用域\n\n" +
+                        "Work Profile 本身和 Android/Google 系统组件会保留，主空间不会受影响。\n" +
+                        "工作资料中的共享下载/照片和账号不会被强制删除。")
+                .setNegativeButton("取消", null)
+                .setPositiveButton("重置", (d, w) -> openResetSpace(targets))
+                .show();
+    }
+
+    private void openResetSpace(ArrayList<String> targets) {
+        if (workUser == null || crossProfileApps == null) return;
+
+        Intent intent = new Intent(this, ResetSpaceActivity.class)
+                .setComponent(new ComponentName(this, ResetSpaceActivity.class))
+                .putStringArrayListExtra(ResetSpaceActivity.EXTRA_PACKAGES, targets);
+
+        if (Build.VERSION.SDK_INT >= 30) {
+            try {
+                if (crossProfileApps.canInteractAcrossProfiles()) {
+                    crossProfileApps.startActivity(intent, workUser, this);
+                    RecommendedStore.clear(this);
+                    updateStatus();
+                    return;
+                }
+                if (crossProfileApps.canRequestInteractAcrossProfiles()) {
+                    startActivity(crossProfileApps.createRequestInteractAcrossProfilesIntent());
+                    Toast.makeText(this,
+                            "先允许 YSpace 跨资料连接；授权后再点一次“一键重置空间”。",
+                            Toast.LENGTH_LONG).show();
+                    return;
+                }
+            } catch (Throwable t) {
+                Toast.makeText(this, "打开工作资料重置器失败：" + t.getMessage(),
+                        Toast.LENGTH_LONG).show();
+                return;
+            }
+        }
+
+        Toast.makeText(this, "当前系统不支持此跨资料重置方式。", Toast.LENGTH_LONG).show();
+    }
+
+    private ArrayList<String> workspaceResetPackages() {
+        LinkedHashSet<String> packages = new LinkedHashSet<>();
+        for (ApplicationInfo ai : apps) {
+            if (isInWorkProfile(ai.packageName) &&
+                    !ai.packageName.equals(getPackageName()) &&
+                    !ai.packageName.equals("com.google.android.gms")) {
+                packages.add(ai.packageName);
+            }
+        }
+        packages.addAll(recommendedWorkPackages());
+        packages.remove(getPackageName());
+        return new ArrayList<>(packages);
     }
 
     private List<String> recommendedWorkPackages() {
@@ -430,6 +520,7 @@ public final class MainActivity extends Activity {
         if (workUser == null) {
             status.setText("未初始化隔离空间 · 首次需要 Android 系统确认一次");
             if (scopeSyncButton != null) scopeSyncButton.setText("推荐 Hook / 同步 LSPosed");
+            if (resetButton != null) resetButton.setEnabled(false);
         } else {
             int recommended = recommendedWorkPackages().size();
             status.setText("隔离空间已连接 · User " + profileUserId(workUser) +
@@ -437,14 +528,12 @@ public final class MainActivity extends Activity {
             if (scopeSyncButton != null) {
                 scopeSyncButton.setText("推荐 Hook / 同步 LSPosed (" + recommended + ")");
             }
+            if (resetButton != null) resetButton.setEnabled(true);
         }
     }
 
     private int profileUserId(UserHandle user) {
         if (user == null) return -1;
-
-        // UserHandle#getIdentifier() is hidden from public SDK stubs.
-        // Its public toString() is UserHandle{<id>} on Android; hashCode is a final fallback.
         String value = user.toString();
         int open = value.indexOf('{');
         int close = value.indexOf('}', open + 1);
