@@ -1,5 +1,3 @@
 <device-admin xmlns:android="http://schemas.android.com/apk/res/android">
-    <uses-policies>
-        <wipe-data />
-    </uses-policies>
+    <uses-policies />
 </device-admin>
