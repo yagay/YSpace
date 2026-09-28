@@ -146,6 +146,30 @@ final class LsposedBridge {
         }
     }
 
+    static boolean removeScopes(Collection<String> packages) {
+        XposedService s = service;
+        if (s == null) return false;
+
+        LinkedHashSet<String> requested = new LinkedHashSet<>();
+        if (packages != null) {
+            for (String pkg : packages) {
+                if (pkg != null && !pkg.isBlank()) requested.add(pkg);
+            }
+        }
+        if (requested.isEmpty()) return true;
+
+        try {
+            s.removeScope(new ArrayList<>(requested));
+            lastMessage = "已清空工作资料中的 YSpace 作用域";
+            notifyChanged();
+            return true;
+        } catch (Throwable t) {
+            lastMessage = "清理 LSPosed 作用域失败：" + t.getClass().getSimpleName();
+            notifyChanged();
+            return false;
+        }
+    }
+
     private static void notifyChanged() {
         for (Listener listener : LISTENERS) {
             try { listener.onChanged(); } catch (Throwable ignored) {}
