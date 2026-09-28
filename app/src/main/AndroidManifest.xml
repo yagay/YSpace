@@ -11,6 +11,10 @@
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
         <activity
+            android:name=".ResetSpaceActivity"
+            android:exported="true" />
+
+        <activity
             android:name=".ScopeSyncActivity"
             android:exported="true" />
 
