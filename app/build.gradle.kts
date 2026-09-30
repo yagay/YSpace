@@ -2,6 +2,8 @@ plugins {
     id("com.android.application")
 }
 
+val ciArm64Only = providers.gradleProperty("ciArm64Only").orNull == "true"
+
 android {
     namespace = "com.yagay.YSpace"
     compileSdk = 36
@@ -12,6 +14,13 @@ android {
         targetSdk = 36
         versionCode = 3
         versionName = "0.3.0"
+
+        if (ciArm64Only) {
+            ndk {
+                abiFilters.clear()
+                abiFilters += "arm64-v8a"
+            }
+        }
     }
 
     compileOptions {
